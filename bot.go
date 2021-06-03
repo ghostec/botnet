@@ -3,11 +3,9 @@ package botnet
 import (
 	"fmt"
 	"log"
-	"net/url"
 	"sync"
 
-	"github.com/cenkalti/backoff"
-	"github.com/gorilla/websocket"
+	"github.com/ghostec/botnet/websocket"
 )
 
 type Bot struct {
@@ -31,29 +29,20 @@ func NewBot(name string) *Bot {
 }
 
 func (bot *Bot) Connect(host string, port int) error {
-	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", host, port), Path: "/"}
-	log.Printf("connecting to %s", u.String())
-
-	if err := backoff.Retry(func() error {
-		c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-		if err != nil {
-			return err
-		}
-
-		bot.conn = c
-
-		return nil
-	}, backoff.NewExponentialBackOff()); err != nil {
+	conn, err := websocket.Dial(host, port)
+	if err != nil {
 		return err
 	}
 
-	if err := bot.conn.WriteMessage(websocket.BinaryMessage, []byte(bot.name)); err != nil {
+	bot.conn = conn
+
+	if err := bot.conn.WriteMessage([]byte(bot.name)); err != nil {
 		return err
 	}
 
 	go func() {
 		for {
-			_, b, err := bot.conn.ReadMessage()
+			b, err := bot.conn.ReadMessage()
 			if err != nil {
 				log.Println("read:", err)
 				break
@@ -121,10 +110,10 @@ func (bot *Bot) invoke(content []byte) error {
 		return err
 	}
 
-	return bot.conn.WriteMessage(websocket.BinaryMessage, b)
+	return bot.conn.WriteMessage(b)
 }
 
-func (bot *Bot) Ask(botname, action string, content []byte) ([]byte, error) {
+func (bot *Bot) Ask(botname, action string, content []byte) Answer {
 	bot.manswers.Lock()
 	askID := bot.nextAskID
 	bot.nextAskID += 1
@@ -140,16 +129,33 @@ func (bot *Bot) Ask(botname, action string, content []byte) ([]byte, error) {
 
 	b, err := ask{ID: askID, BotName: botname, Action: action, Content: content}.Marshal()
 	if err != nil {
-		return nil, err
+		return Answer{err: err}
 	}
 
-	if err := bot.conn.WriteMessage(websocket.BinaryMessage, b); err != nil {
-		return nil, err
+	if err := bot.conn.WriteMessage(b); err != nil {
+		return Answer{err: err}
 	}
 
-	return <-ch, nil
+	return Answer{content: <-ch}
 }
 
 func (bot *Bot) Handle(action string, handler func([]byte) ([]byte, error)) {
 	bot.handlers[action] = handler
+}
+
+type Answer struct {
+	err     error
+	content []byte
+}
+
+func (a Answer) To(un Unmarshaler) error {
+	if a.err != nil {
+		return a.err
+	}
+
+	return un.Unmarshal(a.content)
+}
+
+type Unmarshaler interface {
+	Unmarshal([]byte) error
 }

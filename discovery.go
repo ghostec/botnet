@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -13,6 +14,7 @@ import (
 type Discovery struct {
 	nextInvokeID uint64
 	didListen    chan bool
+	ready        chan bool
 
 	mbots sync.Mutex
 	bots  map[string][]*websocket.Conn
@@ -23,10 +25,15 @@ type Discovery struct {
 
 func NewDiscovery() *Discovery {
 	return &Discovery{
+		ready:     make(chan bool, 1),
 		didListen: make(chan bool, 1),
 		bots:      map[string][]*websocket.Conn{},
 		answers:   map[uint64]chan []byte{},
 	}
+}
+
+func (dsc *Discovery) Wait() {
+	<-dsc.ready
 }
 
 func (dsc *Discovery) Start(host string, port int) error {
@@ -44,11 +51,13 @@ func (dsc *Discovery) Start(host string, port int) error {
 		return err
 	}
 
-	go func() {
-		if err := dsc.startBot(host, port); err != nil {
-			errch <- err
-		}
-	}()
+	time.Sleep(250 * time.Millisecond)
+
+	if err := dsc.startBot(host, port); err != nil {
+		return err
+	}
+
+	close(dsc.ready)
 
 	return <-errch
 }
@@ -56,7 +65,9 @@ func (dsc *Discovery) Start(host string, port int) error {
 func (dsc *Discovery) startServer(host string, port int) error {
 	mux := http.NewServeMux()
 
-	var upgrader = websocket.Upgrader{} // use default options
+	var upgrader = websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool { return true },
+	}
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		c, err := upgrader.Upgrade(w, r, nil)
@@ -75,6 +86,8 @@ func (dsc *Discovery) startServer(host string, port int) error {
 		dsc.mbots.Lock()
 		dsc.bots[string(b)] = append(dsc.bots[string(b)], c)
 		dsc.mbots.Unlock()
+
+		println(string(b))
 
 		for {
 			_, b, err := c.ReadMessage()
@@ -110,7 +123,7 @@ func (dsc *Discovery) startServer(host string, port int) error {
 		return err
 	}
 
-	dsc.didListen <- true
+	close(dsc.didListen)
 
 	return http.Serve(l, mux)
 }
