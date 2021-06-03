@@ -1,35 +1,36 @@
 package botnet_test
 
 import (
+	"bytes"
 	"testing"
+	"time"
 
-	"github.com/ghostec/botnet/messenger/websocket"
+	"github.com/ghostec/botnet"
 )
 
 func TestDiscovery(t *testing.T) {
-	mdsc := websocket.New(websocket.ServerOption("localhost", 8333))
-	bdsc := botnet.NewBot("discovery", mdsc)
-	dsc := botnet.NewDiscovery(bdsc)
-	dsc.Start()
-	// defer dsc.Stop()
+	dsc := botnet.NewDiscovery()
 
-	// action: botnet/discovery/info
-	// answers "name", for example, it's all we need to route requests for now
+	go func() {
+		if err := dsc.Start("localhost", 8333); err != nil {
+			t.Error(err)
+		}
+	}()
 
-	m0 := websocket.New(websocket.DialOption("localhost", 8333))
-	b0 := botnet.New("botnet", m0)
+	time.Sleep(500 * time.Millisecond)
 
-	b0.Handle("echo", func(str string) string {
-		return str
-	})
+	bot := botnet.NewBot("ghostec")
 
-	b0.Start()
-	// defer b0.Stop()
+	if err := bot.Connect("localhost", 8333); err != nil {
+		t.Fatal(err)
+	}
 
-	m1 := websocket.New(websocket.DialOption("localhost", 8333))
-	b1 := botnet.New("client", m1)
-	b1.Start()
-	// defer b1.Stop()
+	b, err := bot.Ask("botnet", "echo", []byte("hello world"))
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	b1.Ask("")
+	if !bytes.Equal(b, []byte("hello world")) {
+		t.Fatal("expected 'hello world', got " + string(b))
+	}
 }
