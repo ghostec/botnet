@@ -24,6 +24,8 @@ func Dial(host string, port int) (*Conn, error) {
 		return nil, err
 	}
 
+	conn.SetReadLimit(10485760)
+
 	return &Conn{conn: conn}, nil
 }
 

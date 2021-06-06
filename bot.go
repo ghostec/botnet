@@ -53,19 +53,21 @@ func (bot *Bot) Connect(host string, port int) error {
 				break
 			}
 
-			// 0 = unknown, 1 = invoke, 2 = answer
-			switch b[0] {
-			case byte('1'):
-				if err := bot.invoke(b); err != nil {
-					log.Println("invoke:", err)
+			go func() {
+				// 0 = unknown, 1 = invoke, 2 = answer
+				switch b[0] {
+				case byte('1'):
+					if err := bot.invoke(b); err != nil {
+						log.Println("invoke:", err)
+					}
+				case byte('2'):
+					if err := bot.answer(b); err != nil {
+						log.Println("answer:", err)
+					}
+				default:
+					log.Println("unknown message type")
 				}
-			case byte('2'):
-				if err := bot.answer(b); err != nil {
-					log.Println("answer:", err)
-				}
-			default:
-				log.Println("unknown message type")
-			}
+			}()
 		}
 	}()
 

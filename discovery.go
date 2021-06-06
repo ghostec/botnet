@@ -1,6 +1,7 @@
 package botnet
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -8,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/websocket"
+	"nhooyr.io/websocket"
 )
 
 type Discovery struct {
@@ -51,7 +52,7 @@ func (dsc *Discovery) Start(host string, port int) error {
 		return err
 	}
 
-	time.Sleep(250 * time.Millisecond)
+	time.Sleep(1 * time.Second)
 
 	if err := dsc.startBot(host, port); err != nil {
 		return err
@@ -65,19 +66,19 @@ func (dsc *Discovery) Start(host string, port int) error {
 func (dsc *Discovery) startServer(host string, port int) error {
 	mux := http.NewServeMux()
 
-	var upgrader = websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool { return true },
-	}
-
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		c, err := upgrader.Upgrade(w, r, nil)
+		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+			InsecureSkipVerify: true,
+		})
 		if err != nil {
 			log.Println("upgrade:", err)
 		}
 
-		defer c.Close()
+		c.SetReadLimit(10485760)
 
-		_, b, err := c.ReadMessage()
+		defer c.Close(websocket.StatusInternalError, "the sky is falling")
+
+		_, b, err := c.Read(context.Background())
 		if err != nil {
 			log.Println("can't read first message")
 			return
@@ -90,7 +91,7 @@ func (dsc *Discovery) startServer(host string, port int) error {
 		println(string(b))
 
 		for {
-			_, b, err := c.ReadMessage()
+			_, b, err := c.Read(context.Background())
 			if err != nil {
 				log.Println("read:", err)
 				break
@@ -101,19 +102,25 @@ func (dsc *Discovery) startServer(host string, port int) error {
 				break
 			}
 
-			// 0 = unknown, 1 = invoke, 2 = answer
-			switch b[0] {
-			case byte('1'):
-				if err := dsc.invokeanswer(c, b); err != nil {
-					log.Println("invokeanswer:", err)
+			println(string(b))
+
+			go func() {
+				// 0 = unknown, 1 = invoke, 2 = answer
+				switch b[0] {
+				case byte('1'):
+					println("invokeanswer")
+					if err := dsc.invokeanswer(c, b); err != nil {
+						log.Println("invokeanswer:", err)
+					}
+				case byte('2'):
+					println("ask", string(b))
+					if err := dsc.ask(c, b); err != nil {
+						log.Println("ask:", err)
+					}
+				default:
+					log.Println("unknown message type")
 				}
-			case byte('2'):
-				if err := dsc.ask(c, b); err != nil {
-					log.Println("ask:", err)
-				}
-			default:
-				log.Println("unknown message type")
-			}
+			}()
 		}
 		return
 	})
@@ -179,7 +186,9 @@ func (dsc *Discovery) ask(conn *websocket.Conn, askb []byte) error {
 		return err
 	}
 
-	if err := bots[0].WriteMessage(websocket.BinaryMessage, b); err != nil {
+	println("ask invoke")
+
+	if err := bots[int(invokeID)%len(bots)].Write(context.Background(), websocket.MessageBinary, b); err != nil {
 		return err
 	}
 
@@ -190,7 +199,7 @@ func (dsc *Discovery) ask(conn *websocket.Conn, askb []byte) error {
 		return nil
 	}
 
-	return conn.WriteMessage(websocket.BinaryMessage, b)
+	return conn.Write(context.Background(), websocket.MessageBinary, b)
 }
 
 func (dsc *Discovery) startBot(host string, port int) error {
