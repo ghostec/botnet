@@ -37,3 +37,7 @@ func (ws *Conn) ReadMessage() ([]byte, error) {
 func (ws *Conn) WriteMessage(b []byte) error {
 	return ws.conn.Write(context.Background(), nws.MessageBinary, b)
 }
+
+func (ws *Conn) Close() error {
+	return ws.conn.Close(nws.StatusNormalClosure, "closed connection")
+}

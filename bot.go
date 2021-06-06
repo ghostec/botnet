@@ -1,6 +1,8 @@
 package botnet
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"log"
 	"sync"
@@ -28,6 +30,10 @@ func NewBot(name string) *Bot {
 	}
 }
 
+func (bot *Bot) Stop() error {
+	return bot.conn.Close()
+}
+
 func (bot *Bot) Connect(host string, port int) error {
 	conn, err := websocket.Dial(host, port)
 	if err != nil {
@@ -38,6 +44,15 @@ func (bot *Bot) Connect(host string, port int) error {
 
 	if err := bot.conn.WriteMessage([]byte(bot.name)); err != nil {
 		return err
+	}
+
+	b, err := bot.conn.ReadMessage()
+	if err != nil {
+		return err
+	}
+
+	if !bytes.Equal(b, []byte("ok")) {
+		return errors.New("not ok")
 	}
 
 	go func() {

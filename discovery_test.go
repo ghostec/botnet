@@ -1,6 +1,7 @@
 package botnet_test
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/ghostec/botnet"
@@ -9,11 +10,8 @@ import (
 func TestDiscovery(t *testing.T) {
 	dsc := botnet.NewDiscovery()
 
-	go func() {
-		if err := dsc.Start("localhost", 8333); err != nil {
-			t.Error(err)
-		}
-	}()
+	defer dsc.Stop()
+	go dsc.Start("localhost", 8333)
 
 	dsc.Wait()
 
@@ -30,6 +28,37 @@ func TestDiscovery(t *testing.T) {
 
 	if str != "hello world" {
 		t.Fatal("expected 'hello world', got " + str)
+	}
+}
+
+func TestDiscoveryWhenBotIsOffline(t *testing.T) {
+	dsc := botnet.NewDiscovery()
+
+	defer dsc.Stop()
+	go dsc.Start("localhost", 8333)
+
+	dsc.Wait()
+
+	if !reflect.DeepEqual([]string{"botnet"}, dsc.Bots()) {
+		t.Fatal("discovery.Bots() isn't []string('botnet')")
+	}
+
+	bot := botnet.NewBot("ghostec")
+
+	if err := bot.Connect("localhost", 8333); err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual([]string{"botnet", "ghostec"}, dsc.Bots()) {
+		t.Fatal("discovery.Bots() isn't []string('botnet')")
+	}
+
+	if err := bot.Stop(); err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual([]string{"botnet"}, dsc.Bots()) {
+		t.Fatal("discovery.Bots() isn't []string('botnet')")
 	}
 }
 

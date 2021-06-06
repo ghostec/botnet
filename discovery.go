@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"sync"
-	"time"
 
 	"nhooyr.io/websocket"
 )
@@ -16,9 +15,10 @@ type Discovery struct {
 	nextInvokeID uint64
 	didListen    chan bool
 	ready        chan bool
+	listener     net.Listener
 
 	mbots sync.Mutex
-	bots  map[string][]*websocket.Conn
+	bots  map[string]*set
 
 	manswers sync.Mutex
 	answers  map[uint64]chan []byte
@@ -28,13 +28,17 @@ func NewDiscovery() *Discovery {
 	return &Discovery{
 		ready:     make(chan bool, 1),
 		didListen: make(chan bool, 1),
-		bots:      map[string][]*websocket.Conn{},
+		bots:      map[string]*set{},
 		answers:   map[uint64]chan []byte{},
 	}
 }
 
 func (dsc *Discovery) Wait() {
 	<-dsc.ready
+}
+
+func (dsc *Discovery) Stop() error {
+	return dsc.listener.Close()
 }
 
 func (dsc *Discovery) Start(host string, port int) error {
@@ -52,8 +56,6 @@ func (dsc *Discovery) Start(host string, port int) error {
 		return err
 	}
 
-	time.Sleep(1 * time.Second)
-
 	if err := dsc.startBot(host, port); err != nil {
 		return err
 	}
@@ -61,6 +63,16 @@ func (dsc *Discovery) Start(host string, port int) error {
 	close(dsc.ready)
 
 	return <-errch
+}
+
+func (dsc *Discovery) Bots() (ret []string) {
+	dsc.mbots.Lock()
+	defer dsc.mbots.Unlock()
+
+	for key := range dsc.bots {
+		ret = append(ret, key)
+	}
+	return
 }
 
 func (dsc *Discovery) startServer(host string, port int) error {
@@ -85,10 +97,14 @@ func (dsc *Discovery) startServer(host string, port int) error {
 		}
 
 		dsc.mbots.Lock()
-		dsc.bots[string(b)] = append(dsc.bots[string(b)], c)
+		if dsc.bots[string(b)] == nil {
+			dsc.bots[string(b)] = &set{}
+		}
+
+		dsc.bots[string(b)].Add(c)
 		dsc.mbots.Unlock()
 
-		println(string(b))
+		c.Write(context.Background(), websocket.MessageBinary, []byte("ok"))
 
 		for {
 			_, b, err := c.Read(context.Background())
@@ -102,18 +118,14 @@ func (dsc *Discovery) startServer(host string, port int) error {
 				break
 			}
 
-			println(string(b))
-
 			go func() {
 				// 0 = unknown, 1 = invoke, 2 = answer
 				switch b[0] {
 				case byte('1'):
-					println("invokeanswer")
 					if err := dsc.invokeanswer(c, b); err != nil {
 						log.Println("invokeanswer:", err)
 					}
 				case byte('2'):
-					println("ask", string(b))
 					if err := dsc.ask(c, b); err != nil {
 						log.Println("ask:", err)
 					}
@@ -122,6 +134,16 @@ func (dsc *Discovery) startServer(host string, port int) error {
 				}
 			}()
 		}
+
+		dsc.mbots.Lock()
+		defer dsc.mbots.Unlock()
+
+		dsc.bots[string(b)].Drop(c)
+
+		if dsc.bots[string(b)].Empty() {
+			delete(dsc.bots, string(b))
+		}
+
 		return
 	})
 
@@ -129,6 +151,8 @@ func (dsc *Discovery) startServer(host string, port int) error {
 	if err != nil {
 		return err
 	}
+
+	dsc.listener = l
 
 	close(dsc.didListen)
 
@@ -164,7 +188,7 @@ func (dsc *Discovery) ask(conn *websocket.Conn, askb []byte) error {
 		return nil
 	}
 
-	if len(bots) == 0 {
+	if bots.Empty() {
 		return nil
 	}
 
@@ -186,9 +210,7 @@ func (dsc *Discovery) ask(conn *websocket.Conn, askb []byte) error {
 		return err
 	}
 
-	println("ask invoke")
-
-	if err := bots[int(invokeID)%len(bots)].Write(context.Background(), websocket.MessageBinary, b); err != nil {
+	if err := bots.Slice()[int(invokeID)%bots.Size()].(*websocket.Conn).Write(context.Background(), websocket.MessageBinary, b); err != nil {
 		return err
 	}
 
