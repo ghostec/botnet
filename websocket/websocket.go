@@ -14,7 +14,7 @@ type Conn struct {
 }
 
 func Dial(host string, port int) (*Conn, error) {
-	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", host, port), Path: "/"}
+	u := url.URL{Scheme: "ws", Host: fmt.Sprintf("%s:%d", host, port), Path: "/bot"}
 	log.Printf("connecting to %s", u.String())
 
 	var conn *nws.Conn

@@ -1,15 +1,15 @@
-package botnet
+package messaging
 
 import "encoding/json"
 
-type ask struct {
+type Ask struct {
 	ID      uint64 `json:"i"`
 	BotName string `json:"b"`
 	Action  string `json:"a"`
 	Content []byte `json:"c"`
 }
 
-func (ask ask) Marshal() ([]byte, error) {
+func (ask Ask) Marshal() ([]byte, error) {
 	b, err := json.Marshal(ask)
 	if err != nil {
 		return nil, err
@@ -18,16 +18,16 @@ func (ask ask) Marshal() ([]byte, error) {
 	return append([]byte{'2'}, b...), nil
 }
 
-func (ask *ask) Unmarshal(b []byte) error {
+func (ask *Ask) Unmarshal(b []byte) error {
 	return json.Unmarshal(b[1:], ask)
 }
 
-type answer struct {
+type Answer struct {
 	AskID   uint64 `json:"a"`
 	Content []byte `json:"c"`
 }
 
-func (answer answer) Marshal() ([]byte, error) {
+func (answer Answer) Marshal() ([]byte, error) {
 	b, err := json.Marshal(answer)
 	if err != nil {
 		return nil, err
@@ -36,17 +36,17 @@ func (answer answer) Marshal() ([]byte, error) {
 	return append([]byte{'2'}, b...), nil
 }
 
-func (answer *answer) Unmarshal(b []byte) error {
+func (answer *Answer) Unmarshal(b []byte) error {
 	return json.Unmarshal(b[1:], answer)
 }
 
-type invoke struct {
+type Invoke struct {
 	ID      uint64 `json:"i"`
 	Action  string `json:"a"`
 	Content []byte `json:"c"`
 }
 
-func (invoke invoke) Marshal() ([]byte, error) {
+func (invoke Invoke) Marshal() ([]byte, error) {
 	b, err := json.Marshal(invoke)
 	if err != nil {
 		return nil, err
@@ -55,17 +55,17 @@ func (invoke invoke) Marshal() ([]byte, error) {
 	return append([]byte{'1'}, b...), nil
 }
 
-func (invoke *invoke) Unmarshal(b []byte) error {
+func (invoke *Invoke) Unmarshal(b []byte) error {
 	return json.Unmarshal(b[1:], invoke)
 }
 
-type invokeanswer struct {
+type InvokeAnswer struct {
 	InvokeID uint64 `json:"i"`
 	Content  []byte `json:"b"`
 }
 
-func (invokeanswer invokeanswer) Marshal() ([]byte, error) {
-	b, err := json.Marshal(invokeanswer)
+func (ia InvokeAnswer) Marshal() ([]byte, error) {
+	b, err := json.Marshal(ia)
 	if err != nil {
 		return nil, err
 	}
@@ -73,6 +73,6 @@ func (invokeanswer invokeanswer) Marshal() ([]byte, error) {
 	return append([]byte{'1'}, b...), nil
 }
 
-func (invokeanswer *invokeanswer) Unmarshal(b []byte) error {
-	return json.Unmarshal(b[1:], invokeanswer)
+func (ia *InvokeAnswer) Unmarshal(b []byte) error {
+	return json.Unmarshal(b[1:], ia)
 }

@@ -6,13 +6,13 @@ import (
 	"os"
 	"sync"
 
-	"github.com/ghostec/botnet"
+	"github.com/ghostec/botnet/bot"
 )
 
 func main() {
-	bot := botnet.NewBot("ghostec")
+	b0 := bot.New("ghostec")
 
-	if err := bot.Connect("localhost", 8333); err != nil {
+	if err := b0.Connect("localhost", 8333); err != nil {
 		panic(err)
 	}
 
@@ -50,7 +50,7 @@ func main() {
 			}
 
 			var b bbyte
-			if err := bot.Ask("ray", "render", argsb).To(&b); err != nil {
+			if err := b0.Ask("ray", "render", argsb).To(&b); err != nil {
 				panic(err)
 			}
 
